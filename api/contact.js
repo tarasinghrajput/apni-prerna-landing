@@ -1,9 +1,22 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
 const recipients = [
   "tarasinghrajput7261@gmail.com",
   "apnipathshalaorg@gmail.com"
 ];
+
+// Create transporter using Zoho SMTP
+const createTransporter = () => {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.zoho.com',
+    port: parseInt(process.env.SMTP_PORT || '465'),
+    secure: true, // true for 465, false for other ports
+    auth: {
+      user: process.env.SMTP_USER, // team@apnipathshala.org
+      pass: process.env.SMTP_PASS, // App password from Zoho
+    },
+  });
+};
 
 export default async function handler(req, res) {
   // Set CORS headers
@@ -26,18 +39,23 @@ export default async function handler(req, res) {
       return res.status(400).json({ message: 'Please provide all required fields.' });
     }
 
-    if (!process.env.RESEND_API_KEY) {
-      console.error('RESEND_API_KEY is not set');
-      return res.status(500).json({ message: 'Email service not configured.' });
+    // Check if SMTP is configured
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      console.error('SMTP credentials not configured');
+      return res.status(500).json({ message: 'Email service not configured. Please contact administrator.' });
     }
 
-    const resend = new Resend(process.env.RESEND_API_KEY);
+    const transporter = createTransporter();
 
-    await resend.emails.send({
-      from: 'Apni Prerna <onboarding@resend.dev>',
-      to: recipients,
-      subject: `New Apni Prerna Inquiry from ${name}`,
+    // Verify connection
+    await transporter.verify();
+
+    // Send email
+    await transporter.sendMail({
+      from: `"Apni Prerna" <${process.env.SMTP_USER}>`,
+      to: recipients.join(', '),
       replyTo: email,
+      subject: `New Apni Prerna Inquiry from ${name}`,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #2563EB;">New Contact Form Submission</h2>
@@ -69,8 +87,11 @@ export default async function handler(req, res) {
             <p style="white-space: pre-wrap; color: #111827;">${message}</p>
           </div>
           ` : ''}
+          <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; color: #6B7280; font-size: 12px;">
+            <p>This email was sent from the Apni Prerna contact form.</p>
+          </div>
         </div>
-      `
+      `,
     });
 
     return res.status(200).json({ message: 'Message sent successfully!' });
